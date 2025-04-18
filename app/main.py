@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints.auth import router as auth_router
+from app.api.router import router
 
 app = FastAPI(
     title="ПВЗ API",
@@ -16,11 +16,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/api")
+app.include_router(router)
 
 @app.get("/")
 async def root():
-    return {"message": "API работает!"}
+    return {"message": "ПВЗ API работает!"}
 
 
 # docker-compose exec app alembic revision --autogenerate -m "Initial migration"
