@@ -5,6 +5,7 @@ from app.dao.reception import ReceptionDAO
 from app.metrics_server import RECEPTIONS_CREATED
 from app.schemas.pvz import ReceptionCreateSchema
 from app.logger import logger
+from app.database import async_session_maker
 
 
 router = APIRouter(
@@ -12,40 +13,63 @@ router = APIRouter(
     tags=["Приемки"]
 )
 
+# @router.post("", status_code=status.HTTP_201_CREATED)
+# async def create_reception(
+#     reception_data: ReceptionCreateSchema,
+#     current_user = Depends(get_current_employee)
+# ):
+#     """
+#     Создание новой приемки товаров.
+#     Доступно только для пользователей с ролью 'employee'.
+    
+#     - **pvz_id**: ID пункта выдачи заказов
+#     """
+#     RECEPTIONS_CREATED.inc()
+
+#     pvz = await PVZDAO.find_one_or_none(id=reception_data.pvz_id)
+#     if not pvz:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="ПВЗ не найден"
+#         )
+    
+#     active_reception = await ReceptionDAO.find_active_reception(reception_data.pvz_id)
+#     if active_reception:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="У данного ПВЗ уже есть незакрытая приемка"
+#         )
+    
+#     reception = await ReceptionDAO.add(
+#         pvz_id=reception_data.pvz_id,
+#         status="in_progress"
+#     )
+    
+#     created_reception = await ReceptionDAO.find_active_reception(reception_data.pvz_id)
+#     logger.info(f"Создана приёмка для ПВЗ {reception_data.pvz_id} (ID: {reception.id})")
+
+#     return created_reception
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_reception(
     reception_data: ReceptionCreateSchema,
     current_user = Depends(get_current_employee)
 ):
+    async with async_session_maker() as session:
+        dao = ReceptionDAO(session)
+        reception = await dao.add(reception_data.model_dump())
+        await session.commit()
+        return reception
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_reception(
+    data: ReceptionCreateSchema,
+    current_user = Depends(get_current_employee)
+):
     """
-    Создание новой приемки товаров.
-    Доступно только для пользователей с ролью 'employee'.
-    
-    - **pvz_id**: ID пункта выдачи заказов
+    Создание новой приемки товаров (только для сотрудников)
     """
-    RECEPTIONS_CREATED.inc()
-
-    pvz = await PVZDAO.find_one_or_none(id=reception_data.pvz_id)
-    if not pvz:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ПВЗ не найден"
-        )
-    
-    active_reception = await ReceptionDAO.find_active_reception(reception_data.pvz_id)
-    if active_reception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="У данного ПВЗ уже есть незакрытая приемка"
-        )
-    
-    reception = await ReceptionDAO.add(
-        pvz_id=reception_data.pvz_id,
-        status="in_progress"
-    )
-    
-    created_reception = await ReceptionDAO.find_active_reception(reception_data.pvz_id)
-    logger.info(f"Создана приёмка для ПВЗ {reception_data.pvz_id} (ID: {reception.id})")
-
-    return created_reception
-
+    async with async_session_maker() as session:
+        reception = await ReceptionDAO(session).add(data.model_dump())
+        return reception

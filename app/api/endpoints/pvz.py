@@ -55,24 +55,57 @@ router = APIRouter(
 
 #     return pvz
 
-@router.post("", response_model=PVZSchema)
-async def create_pvz(pvz_data: PVZCreateSchema, current_user: dict = Depends(get_current_moderator)):
-    if pvz_data.city not in ["Москва", "Санкт-Петербург", "Казань"]:
-        raise HTTPException(status_code=400, detail="Недопустимый город")
+# @router.post("", response_model=PVZSchema)
+# async def create_pvz(pvz_data: PVZCreateSchema, current_user: dict = Depends(get_current_moderator)):
+#     if pvz_data.city not in ["Москва", "Санкт-Петербург", "Казань"]:
+#         raise HTTPException(status_code=400, detail="Недопустимый город")
 
-    pvz_id = uuid.uuid4()
-    await PVZDAO.add({
-        "id": pvz_id,
-        "city": pvz_data.city,
-        "registration_date": datetime.utcnow()
-    })
+#     pvz_id = uuid.uuid4()
+#     await PVZDAO.add({
+#         "id": pvz_id,
+#         "city": pvz_data.city,
+#         "registration_date": datetime.utcnow()
+#     })
 
-    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
-    await PVZDAO.add(pvz)
-    PVZ_CREATED.inc()
-    logger.info(f"Создан ПВЗ: {pvz.city} (ID: {pvz.id})")
-    return pvz
+#     pvz = await PVZDAO.find_one_or_none(id=pvz_id)
+#     await PVZDAO.add(pvz)
+#     PVZ_CREATED.inc()
+#     logger.info(f"Создан ПВЗ: {pvz.city} (ID: {pvz.id})")
+#     return pvz
 
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=PVZSchema)
+async def create_pvz(
+    pvz_data: PVZCreateSchema,
+    current_user = Depends(get_current_moderator)
+):
+    async with async_session_maker() as session:
+        dao = PVZDAO(session)
+        pvz = await dao.add(pvz_data.model_dump())
+        await session.commit()
+        return pvz
+
+
+
+
+@router.get("", response_model=List[PVZSchema])
+async def list_pvz(
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    current_user = Depends(get_current_user)
+):
+    """
+    Получение списка ПВЗ с фильтрацией по дате регистрации
+    """
+    async with async_session_maker() as session:
+        pvzs = await PVZDAO(session).get_filtered_paginated(
+            start_date=start_date,
+            end_date=end_date,
+            page=page,
+            limit=limit
+        )
+        return pvzs
 
 @router.get("", response_model=List[dict])
 async def get_pvz_list(
@@ -147,39 +180,54 @@ async def get_pvz_list(
         return response
     
 
+# @router.post("/{pvz_id}/close_last_reception", status_code=status.HTTP_200_OK)
+# async def close_reception(
+#     pvz_id: str,
+#     current_user = Depends(get_current_employee)
+# ):
+#     """
+#     Закрытие последней открытой приемки товаров в рамках ПВЗ.
+#     Доступно только для пользователей с ролью 'employee'.
+    
+#     - **pvz_id**: ID пункта выдачи заказов
+#     """
+#     pvz = await PVZDAO.find_one_or_none(id=pvz_id)
+#     if not pvz:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="ПВЗ не найден"
+#         )
+    
+#     active_reception = await ReceptionDAO.find_active_reception(pvz_id)
+#     if not active_reception:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="У данного ПВЗ нет открытой приемки"
+#         )
+    
+#     await ReceptionDAO.update(
+#         filter_by={"id": active_reception.id},
+#         status="close"
+#     )
+    
+#     closed_reception = await ReceptionDAO.find_one_or_none(id=active_reception.id)
+    
+#     return closed_reception
+
 @router.post("/{pvz_id}/close_last_reception", status_code=status.HTTP_200_OK)
 async def close_reception(
     pvz_id: str,
     current_user = Depends(get_current_employee)
 ):
-    """
-    Закрытие последней открытой приемки товаров в рамках ПВЗ.
-    Доступно только для пользователей с ролью 'employee'.
-    
-    - **pvz_id**: ID пункта выдачи заказов
-    """
-    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
-    if not pvz:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ПВЗ не найден"
-        )
-    
-    active_reception = await ReceptionDAO.find_active_reception(pvz_id)
-    if not active_reception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="У данного ПВЗ нет открытой приемки"
-        )
-    
-    await ReceptionDAO.update(
-        filter_by={"id": active_reception.id},
-        status="close"
-    )
-    
-    closed_reception = await ReceptionDAO.find_one_or_none(id=active_reception.id)
-    
-    return closed_reception
+    async with async_session_maker() as session:
+        reception_dao = ReceptionDAO(session)
+        active_reception = await reception_dao.get_last_open(pvz_id)
+        if not active_reception:
+            raise HTTPException(status_code=404, detail="Нет открытых приемок")
+
+        active_reception.status = "close"
+        await session.commit()
+        return {"status": "closed", "reception_id": active_reception.id}
 
 
 @router.post("/{pvz_id}/delete_last_product")
@@ -201,3 +249,20 @@ async def delete_last_product(
 
     await ProductDAO.delete(last_product.id)
     return {"detail": "Удалено успешно"}
+
+
+@router.post("/{pvz_id}/close_last_reception", status_code=status.HTTP_200_OK)
+async def close_last_reception(
+    pvz_id: UUID4,
+    current_user = Depends(get_current_employee)
+):
+    """
+    Закрытие последней открытой приемки товаров в ПВЗ
+    """
+    async with async_session_maker() as session:
+        reception = await ReceptionDAO(session).get_last_open(pvz_id)
+        if not reception:
+            raise HTTPException(status_code=404, detail="Нет открытых приемок")
+
+        await ReceptionDAO(session).close(reception)
+        return {"status": "closed", "reception_id": reception.id}
