@@ -4,14 +4,11 @@ from app.logger import logger
 
 
 class BaseDAO:
-    """Экземплярный DAO: работает ТОЛЬКО с self.session,
-    поэтому всегда находится в том же event‑loop, что и вызвавший код."""
     model = None
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    # ---------- CRUD ----------
     async def add(self, data: dict):
         obj = self.model(**data)
         self.session.add(obj)
@@ -20,27 +17,24 @@ class BaseDAO:
 
     async def find_one_or_none(self, **filter_by):
         try:
-            result = await self.session.execute(
+            res = await self.session.execute(
                 select(self.model).filter_by(**filter_by)
             )
-            return result.scalars().one_or_none()
+            obj = res.scalars().one_or_none()
+            res.close()
+            return obj
         except Exception as exc:
-            logger.error(f"find_one_or_none: {exc}")
+            logger.error("find_one_or_none: %s", exc)
             raise ValueError(f"Database error: {exc}") from exc
 
     async def find_all(self, **filter_by):
         try:
-            result = await self.session.execute(
+            res = await self.session.execute(
                 select(self.model).filter_by(**filter_by)
             )
-            return result.scalars().all()
+            data = res.scalars().all()
+            res.close()
+            return data
         except Exception as exc:
-            logger.error(f"find_all: {exc}")
+            logger.error("find_all: %s", exc)
             raise ValueError(f"Database error: {exc}") from exc
-
-    async def delete(self, **filter_by):
-        obj = await self.find_one_or_none(**filter_by)
-        if obj:
-            await self.session.delete(obj)
-            await self.session.flush()
-        return obj

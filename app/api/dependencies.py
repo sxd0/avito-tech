@@ -1,61 +1,68 @@
-from datetime import datetime
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, OAuth2PasswordBearer
-from jose import jwt, JWTError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
 from app.core.config import settings
 from app.dao.users import UsersDAO
-from fastapi.security import HTTPBearer
+from app.database import async_session_maker
 
-
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 token_auth_scheme = HTTPBearer()
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(token_auth_scheme),
+):
     """
-    Получение текущего пользователя по токену.
+    Извлекаем текущего пользователя из JWTтокена.
     """
     token = credentials.credentials
-    credentials_exception = HTTPException(
+    credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Невозможно проверить учетные данные",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise credentials_exception
-        if user_id.startswith("dummy-"):
-            role = payload.get("role")
-            return {"id": user_id, "role": role}
-    except JWTError:
-        raise credentials_exception
-    
-    user = await UsersDAO.find_one_or_none(id=user_id)
-    if user is None:
-        raise credentials_exception
-    return user
+            raise credentials_exc
 
-async def get_current_employee(current_user = Depends(get_current_user)):
+        if user_id.startswith("dummy-"):
+            return {"id": user_id, "role": payload.get("role")}
+
+    except JWTError:
+        raise credentials_exc
+
+    async with async_session_maker() as session:
+        user = await UsersDAO(session).find_one_or_none(id=user_id)
+        if user is None:
+            raise credentials_exc
+        return user
+
+
+async def get_current_employee(current_user=Depends(get_current_user)):
     """
-    Проверка, что текущий пользователь - сотрудник ПВЗ.
+    Доступ разрешён сотруднику ПВЗ (role == "employee").
     """
-    if getattr(current_user, "role", None) == "employee" or (isinstance(current_user, dict) and current_user.get("role") == "employee"):
+    role = current_user.get("role") if isinstance(current_user, dict) else current_user.role
+    if role == "employee":
         return current_user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Недостаточно прав (требуется роль 'employee')"
+        detail="Недостаточно прав (требуется роль 'employee')",
     )
 
-async def get_current_moderator(current_user = Depends(get_current_user)):
+
+async def get_current_moderator(current_user=Depends(get_current_user)):
     """
-    Проверка, что текущий пользователь - модератор.
+    Доступ разрешён модератору (role == "moderator").
     """
-    if getattr(current_user, "role", None) == "moderator" or (isinstance(current_user, dict) and current_user.get("role") == "moderator"):
+    role = current_user.get("role") if isinstance(current_user, dict) else current_user.role
+    if role == "moderator":
         return current_user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Недостаточно прав (требуется роль 'moderator')"
+        detail="Недостаточно прав (требуется роль 'moderator')",
     )

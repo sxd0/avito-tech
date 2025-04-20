@@ -34,13 +34,12 @@ async def list_pvz(start_date: Optional[datetime] = Query(None), end_date: Optio
 
 @router.post("/{pvz_id}/close_last_reception")
 async def close_reception(pvz_id: str, current_user=Depends(get_current_employee)):
-    """Закрытие последней открытой приёмки для ПВЗ"""
     async with async_session_maker() as session:
-        dao = ReceptionDAO(session)
-        reception = await dao.get_last_open(pvz_id)
+        reception_dao = ReceptionDAO(session)
+        reception = await reception_dao.get_last_open(pvz_id)
         if not reception:
             raise HTTPException(status_code=404, detail="Нет открытых приемок")
-        await dao.close(reception)
+        await reception_dao.close(reception)
         await session.commit()
-        logger.info(f"Reception {reception.id} closed for PVZ {pvz_id}")
+        logger.info("Reception %s closed for PVZ %s", reception.id, pvz_id)
         return {"status": "closed", "reception_id": reception.id}
