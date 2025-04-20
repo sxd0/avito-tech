@@ -2,6 +2,7 @@ from datetime import datetime
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List, Optional
+from pydantic import UUID4
 from sqlalchemy import select, and_
 
 from app.api.dependencies import get_current_employee, get_current_moderator, get_current_user
@@ -19,38 +20,54 @@ router = APIRouter(
     tags=["ПВЗ"]
 )
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=PVZSchema)
-async def create_pvz(
-    pvz_data: PVZCreateSchema, 
-    current_user = Depends(get_current_moderator)
-):
-    """
-    Создание нового ПВЗ (только для модераторов).
-    - **city**: Город (Москва, Санкт-Петербург или Казань)
-    """
-    if pvz_data.city not in ["Москва", "Санкт-Петербург", "Казань"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Город должен быть одним из: Москва, Санкт-Петербург, Казань"
-        )
+# @router.post("", status_code=status.HTTP_201_CREATED, response_model=PVZSchema)
+# async def create_pvz(
+#     pvz_data: PVZCreateSchema, 
+#     current_user = Depends(get_current_moderator)
+# ):
+#     """
+#     Создание нового ПВЗ (только для модераторов).
+#     - **city**: Город (Москва, Санкт-Петербург или Казань)
+#     """
+#     if pvz_data.city not in ["Москва", "Санкт-Петербург", "Казань"]:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Город должен быть одним из: Москва, Санкт-Петербург, Казань"
+#         )
     
 
-    new_id = uuid.uuid4()
+#     new_id = uuid.uuid4()
 
-    pvz_dict = {
-        "id": new_id,
+#     pvz_dict = {
+#         "id": new_id,
+#         "city": pvz_data.city,
+#         "registration_date": datetime.utcnow()
+#     }
+
+#     await PVZDAO.add(city=pvz_data.city)
+#     pvz = await PVZDAO.find_one_or_none(id=new_id)
+
+#     # created_pvz = await PVZDAO.find_one_or_none(city=pvz_data.city)
+#     if not pvz:
+#         raise HTTPException(status_code=500, detail="Не удалось создать ПВЗ")
+
+#     return pvz
+
+@router.post("", response_model=PVZSchema)
+async def create_pvz(pvz_data: PVZCreateSchema, current_user: dict = Depends(get_current_moderator)):
+    if pvz_data.city not in ["Москва", "Санкт-Петербург", "Казань"]:
+        raise HTTPException(status_code=400, detail="Недопустимый город")
+
+    pvz_id = uuid.uuid4()
+    await PVZDAO.add({
+        "id": pvz_id,
         "city": pvz_data.city,
         "registration_date": datetime.utcnow()
-    }
+    })
 
-    await PVZDAO.add(city=pvz_data.city)
-    pvz = await PVZDAO.find_one_or_none(id=new_id)
-
-    # created_pvz = await PVZDAO.find_one_or_none(city=pvz_data.city)
-    if not pvz:
-        raise HTTPException(status_code=500, detail="Не удалось создать ПВЗ")
-
+    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
     return pvz
+
 
 @router.get("", response_model=List[dict])
 async def get_pvz_list(
@@ -123,3 +140,59 @@ async def get_pvz_list(
             })
         
         return response
+    
+
+@router.post("/{pvz_id}/close_last_reception", status_code=status.HTTP_200_OK)
+async def close_reception(
+    pvz_id: str,
+    current_user = Depends(get_current_employee)
+):
+    """
+    Закрытие последней открытой приемки товаров в рамках ПВЗ.
+    Доступно только для пользователей с ролью 'employee'.
+    
+    - **pvz_id**: ID пункта выдачи заказов
+    """
+    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
+    if not pvz:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ПВЗ не найден"
+        )
+    
+    active_reception = await ReceptionDAO.find_active_reception(pvz_id)
+    if not active_reception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У данного ПВЗ нет открытой приемки"
+        )
+    
+    await ReceptionDAO.update(
+        filter_by={"id": active_reception.id},
+        status="close"
+    )
+    
+    closed_reception = await ReceptionDAO.find_one_or_none(id=active_reception.id)
+    
+    return closed_reception
+
+
+@router.post("/{pvz_id}/delete_last_product")
+async def delete_last_product(
+    pvz_id: UUID4,
+    current_user: dict = Depends(get_current_employee)
+):
+    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
+    if not pvz:
+        raise HTTPException(status_code=404, detail="ПВЗ не найден")
+
+    active = await ReceptionDAO.find_active_reception(pvz_id)
+    if not active:
+        raise HTTPException(status_code=400, detail="Нет открытой приёмки")
+
+    last_product = await ProductDAO.get_last_product(active.id)
+    if not last_product:
+        raise HTTPException(status_code=400, detail="Нет товаров для удаления")
+
+    await ProductDAO.delete(last_product.id)
+    return {"detail": "Удалено успешно"}

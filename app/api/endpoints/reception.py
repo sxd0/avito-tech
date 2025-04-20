@@ -43,36 +43,3 @@ async def create_reception(
     
     return created_reception
 
-@router.post("/pvz/{pvz_id}/close_last_reception", status_code=status.HTTP_200_OK)
-async def close_reception(
-    pvz_id: str,
-    current_user = Depends(get_current_employee)
-):
-    """
-    Закрытие последней открытой приемки товаров в рамках ПВЗ.
-    Доступно только для пользователей с ролью 'employee'.
-    
-    - **pvz_id**: ID пункта выдачи заказов
-    """
-    pvz = await PVZDAO.find_one_or_none(id=pvz_id)
-    if not pvz:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ПВЗ не найден"
-        )
-    
-    active_reception = await ReceptionDAO.find_active_reception(pvz_id)
-    if not active_reception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="У данного ПВЗ нет открытой приемки"
-        )
-    
-    await ReceptionDAO.update(
-        filter_by={"id": active_reception.id},
-        status="close"
-    )
-    
-    closed_reception = await ReceptionDAO.find_one_or_none(id=active_reception.id)
-    
-    return closed_reception
