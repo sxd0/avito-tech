@@ -46,13 +46,19 @@ async def register_user(user_data: UserRegisterSchema):
     
     hashed_password = get_password_hash(user_data.password)
     
-    await UsersDAO.add(
-        email=user_data.email,
-        hashed_password=hashed_password,
-        role=user_data.role
-    )
-    
-    return {"message": "Пользователь успешно зарегистрирован"}
+    user_data_dict = {
+        "email": user_data.email,
+        "hashed_password": hashed_password,
+        "role": user_data.role,
+    }
+
+    user_id = await UsersDAO.add(**user_data_dict)
+    # user = await UsersDAO.find_one_or_none(id=user_id)
+    user = await UsersDAO.find_one_or_none(email=user_data.email)
+    if not user:
+        raise HTTPException(status_code=500, detail="Ошибка при создании пользователя")
+
+    return user
 
 @router.post("/login", response_model=TokenSchema)
 async def login_user(user_data: UserLoginSchema):
@@ -62,19 +68,8 @@ async def login_user(user_data: UserLoginSchema):
     - **password**: Пароль пользователя
     """
     user = await UsersDAO.find_one_or_none(email=user_data.email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверные учетные данные",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверные учетные данные",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token = create_access_token({"sub": str(user.id), "role": user.role})
-    return TokenSchema(access_token=access_token, token_type="bearer")
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные учётные данные")
+
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    return {"access_token": access_token, "token_type": "bearer"}

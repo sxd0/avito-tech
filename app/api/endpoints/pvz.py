@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List, Optional
 from sqlalchemy import select, and_
@@ -33,11 +34,23 @@ async def create_pvz(
             detail="Город должен быть одним из: Москва, Санкт-Петербург, Казань"
         )
     
-    pvz = await PVZDAO.add(city=pvz_data.city)
-    
-    created_pvz = await PVZDAO.find_one_or_none(city=pvz_data.city)
-    
-    return created_pvz
+
+    new_id = uuid.uuid4()
+
+    pvz_dict = {
+        "id": new_id,
+        "city": pvz_data.city,
+        "registration_date": datetime.utcnow()
+    }
+
+    await PVZDAO.add(city=pvz_data.city)
+    pvz = await PVZDAO.find_one_or_none(id=new_id)
+
+    # created_pvz = await PVZDAO.find_one_or_none(city=pvz_data.city)
+    if not pvz:
+        raise HTTPException(status_code=500, detail="Не удалось создать ПВЗ")
+
+    return pvz
 
 @router.get("", response_model=List[dict])
 async def get_pvz_list(
@@ -51,6 +64,7 @@ async def get_pvz_list(
     Получение списка ПВЗ с фильтрацией по дате приемки и пагинацией.
     Доступно для пользователей с ролью 'employee' или 'moderator'.
     """
+    
     user_role = current_user.role if hasattr(current_user, "role") else current_user.get("role")
 
     if user_role not in ["employee", "moderator"]:

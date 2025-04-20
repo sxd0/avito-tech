@@ -1,16 +1,22 @@
 from datetime import datetime
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, OAuth2PasswordBearer
 from jose import jwt, JWTError
 from app.core.config import settings
 from app.dao.users import UsersDAO
+from fastapi.security import HTTPBearer
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+token_auth_scheme = HTTPBearer()
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """
     Получение текущего пользователя по токену.
     """
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Невозможно проверить учетные данные",

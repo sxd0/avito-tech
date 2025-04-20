@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from typing import Literal
+from pydantic import UUID4, BaseModel, EmailStr, ConfigDict
 
 
 class TokenSchema(BaseModel):
@@ -24,9 +25,8 @@ class DummyLoginSchema(BaseModel):
 
 
 class UserSchema(BaseModel):
-    id: str
+    id: UUID4
     email: EmailStr
-    role: str
-    created_at: str
+    role: Literal["employee", "moderator"]
     
     model_config = ConfigDict(from_attributes=True)

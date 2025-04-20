@@ -1,6 +1,9 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import UUID4, BaseModel, ConfigDict, Field
 from typing import List, Optional
+
+from app.schemas.product import ProductSchema
+from app.schemas.reception import ReceptionSchema
 
 
 class PVZCreateSchema(BaseModel):
@@ -10,11 +13,17 @@ class PVZCreateSchema(BaseModel):
 
 
 class PVZSchema(BaseModel):
-    id: str
+    id: UUID4
     registration_date: datetime
     city: str
-    
-    model_config = ConfigDict(from_attributes=True)
+
+class ReceptionWithProducts(BaseModel):
+    reception: ReceptionSchema
+    products: List[ProductSchema]
+
+class PVZWithReceptions(BaseModel):
+    pvz: PVZSchema
+    receptions: List[ReceptionWithProducts]
 
 
 class ReceptionCreateSchema(BaseModel):
