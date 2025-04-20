@@ -32,5 +32,16 @@ services:
         docker-entrypoint.sh postgres
       "
 
+  grpc:
+    build: .
+    command: python app/server_grpc.py
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+
+
 volumes:
   postgres_data:
