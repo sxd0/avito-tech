@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from app.core.security import create_access_token, create_dummy_token, get_password_hash, verify_password
 from app.dao.users import UsersDAO
 from app.schemas.auth import DummyLoginSchema, TokenSchema, UserLoginSchema, UserRegisterSchema, UserSchema
@@ -54,24 +55,26 @@ async def register_user(user_data: UserRegisterSchema):
     return {"message": "Пользователь успешно зарегистрирован"}
 
 @router.post("/login", response_model=TokenSchema)
-async def login_user(login_data: UserLoginSchema):
+async def login_user(user_data: UserLoginSchema):
     """
     Вход пользователя в систему.
-    - **email**: Email пользователя
+    - **username**: Email пользователя
     - **password**: Пароль пользователя
     """
-    user = await UsersDAO.find_one_or_none(email=login_data.email)
+    user = await UsersDAO.find_one_or_none(email=user_data.email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверные учетные данные"
+            detail="Неверные учетные данные",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not verify_password(login_data.password, user.hashed_password):
+    if not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверные учетные данные"
+            detail="Неверные учетные данные",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
     access_token = create_access_token({"sub": str(user.id), "role": user.role})
-    return TokenSchema(access_token=access_token)
+    return TokenSchema(access_token=access_token, token_type="bearer")

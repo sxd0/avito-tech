@@ -18,6 +18,7 @@ app.add_middleware(
 
 app.include_router(router)
 
+
 @app.get("/")
 async def root():
     return {"message": "ПВЗ API работает!"}

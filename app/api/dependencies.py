@@ -36,7 +36,7 @@ async def get_current_employee(current_user = Depends(get_current_user)):
     """
     Проверка, что текущий пользователь - сотрудник ПВЗ.
     """
-    if current_user.get("role") == "employee" or getattr(current_user, "role", None) == "employee":
+    if getattr(current_user, "role", None) == "employee" or (isinstance(current_user, dict) and current_user.get("role") == "employee"):
         return current_user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -47,7 +47,7 @@ async def get_current_moderator(current_user = Depends(get_current_user)):
     """
     Проверка, что текущий пользователь - модератор.
     """
-    if current_user.get("role") == "moderator" or getattr(current_user, "role", None) == "moderator":
+    if getattr(current_user, "role", None) == "moderator" or (isinstance(current_user, dict) and current_user.get("role") == "moderator"):
         return current_user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

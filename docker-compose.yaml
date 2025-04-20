@@ -26,6 +26,11 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5432:5432"
+    command: >
+      bash -c "
+        echo 'CREATE DATABASE test_db;' > /docker-entrypoint-initdb.d/init.sql &&
+        docker-entrypoint.sh postgres
+      "
 
 volumes:
   postgres_data:

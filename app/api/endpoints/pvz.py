@@ -51,7 +51,8 @@ async def get_pvz_list(
     Получение списка ПВЗ с фильтрацией по дате приемки и пагинацией.
     Доступно для пользователей с ролью 'employee' или 'moderator'.
     """
-    user_role = getattr(current_user, "role", current_user.get("role"))
+    user_role = current_user.role if hasattr(current_user, "role") else current_user.get("role")
+
     if user_role not in ["employee", "moderator"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
