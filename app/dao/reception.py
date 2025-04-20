@@ -1,4 +1,4 @@
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from app.dao.base import BaseDAO
 from app.models.reception import Reception
 
@@ -19,6 +19,5 @@ class ReceptionDAO(BaseDAO):
         return result.scalars().first()
 
     async def close(self, reception):
-        from datetime import datetime
-        reception.closed_at = datetime.utcnow()
+        reception.status = "close"
         await self.session.flush()
