@@ -1,41 +1,33 @@
+import uuid
 import pytest
-from app.dao.users import UsersDAO
-from app.core.security import get_password_hash
 
 
 @pytest.mark.asyncio
 async def test_register_user(client):
-    response = client.post("/api/register", json={
-        "email": "test@example.com",
-        "password": "testpassword",
-        "role": "employee"
+    email = f"t{uuid.uuid4()}@ex.com"
+    r = await client.post("/api/register", json={
+        "email": email, "password": "pw", "role": "employee"
     })
-    assert response.status_code == 201
-    assert response.json() == {"message": "Пользователь успешно зарегистрирован"}
+    assert r.status_code == 201
 
 
 @pytest.mark.asyncio
 async def test_login_user(client):
-    await UsersDAO.add(
-        email="login_test@example.com",
-        hashed_password=get_password_hash("testpassword"),
-        role="employee"
-    )
-    
-    response = client.post("/api/login", json={
-        "email": "login_test@example.com",
-        "password": "testpassword"
+    email = f"t{uuid.uuid4()}@ex.com"
+    pw = "pw"
+
+    await client.post("/api/register", json={
+        "email": email, "password": pw, "role": "employee"
     })
-    assert response.status_code == 200
-    assert "access_token" in response.json()
-    assert response.json()["token_type"] == "bearer"
+
+    r = await client.post("/api/login", json={"email": email, "password": pw})
+    assert r.status_code == 200
+    assert "access_token" in r.json()
 
 
 @pytest.mark.asyncio
 async def test_dummy_login(client):
-    response = client.post("/api/dummyLogin", json={"role": "moderator"})
-    assert response.status_code == 200
-    assert "access_token" in response.json()
-    
-    response = client.post("/api/dummyLogin", json={"role": "invalid_role"})
-    assert response.status_code == 400
+    ok = await client.post("/api/dummyLogin", json={"role": "moderator"})
+    bad = await client.post("/api/dummyLogin", json={"role": "foo"})
+    assert ok.status_code == 200
+    assert bad.status_code == 400

@@ -1,11 +1,11 @@
 import pytest
 
 @pytest.mark.asyncio
-async def test_create_pvz(client):
+async def test_create_pvz(client, auth_headers_moderator):
     response = await client.post(
-        "/pvz",
+        "/api/pvz",
         json={"city": "Москва"},
-        headers={"Authorization": "Bearer test-moderator-token"}
+        headers=auth_headers_moderator
     )
     assert response.status_code == 201
     data = response.json()
@@ -13,10 +13,10 @@ async def test_create_pvz(client):
     assert data["city"] == "Москва"
 
 @pytest.mark.asyncio
-async def test_list_pvz(client):
+async def test_list_pvz(client, auth_headers_employee):
     response = await client.get(
-        "/pvz",
-        headers={"Authorization": "Bearer test-user-token"}
+        "/api/pvz",
+        headers=auth_headers_employee
     )
     assert response.status_code == 200
     assert isinstance(response.json(), list)

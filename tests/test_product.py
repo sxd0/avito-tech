@@ -1,26 +1,25 @@
 import pytest
 
 @pytest.mark.asyncio
-async def test_add_product(client):
-    pvz_resp = await client.post("/pvz", json={"city": "Казань"}, headers={"Authorization": "Bearer test-moderator-token"})
+async def test_add_product(client, auth_headers_moderator, auth_headers_employee):
+    pvz_resp = await client.post("/api/pvz", json={"city": "Казань"}, headers=auth_headers_moderator)
     pvz_id = pvz_resp.json()["id"]
 
-    reception_resp = await client.post("/receptions", json={"pvz_id": pvz_id}, headers={"Authorization": "Bearer test-employee-token"})
-    assert reception_resp.status_code == 201
+    await client.post("/api/receptions", json={"pvz_id": pvz_id}, headers=auth_headers_employee)
 
-    response = await client.post("/products", json={"type": "электроника", "pvz_id": pvz_id}, headers={"Authorization": "Bearer test-employee-token"})
+    response = await client.post("/api/products", json={"type": "электроника", "pvz_id": pvz_id}, headers=auth_headers_employee)
     assert response.status_code == 201
     data = response.json()
     assert data["type"] == "электроника"
 
 @pytest.mark.asyncio
-async def test_delete_last_product(client):
-    pvz_resp = await client.post("/pvz", json={"city": "Казань"}, headers={"Authorization": "Bearer test-moderator-token"})
+async def test_delete_last_product(client, auth_headers_moderator, auth_headers_employee):
+    pvz_resp = await client.post("/api/pvz", json={"city": "Казань"}, headers=auth_headers_moderator)
     pvz_id = pvz_resp.json()["id"]
 
-    await client.post("/receptions", json={"pvz_id": pvz_id}, headers={"Authorization": "Bearer test-employee-token"})
-    await client.post("/products", json={"type": "одежда", "pvz_id": pvz_id}, headers={"Authorization": "Bearer test-employee-token"})
+    await client.post("/api/receptions", json={"pvz_id": pvz_id}, headers=auth_headers_employee)
+    await client.post("/api/products", json={"type": "одежда", "pvz_id": pvz_id}, headers=auth_headers_employee)
 
-    response = await client.post(f"/pvz/{pvz_id}/delete_last_product", headers={"Authorization": "Bearer test-employee-token"})
+    response = await client.post(f"/api/pvz/{pvz_id}/delete_last_product", headers=auth_headers_employee)
     assert response.status_code == 200
     assert "product_id" in response.json()

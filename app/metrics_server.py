@@ -17,8 +17,10 @@ RECEPTIONS_CREATED = Counter("business_receptions_created_total", "Number of cre
 PRODUCTS_CREATED = Counter("business_products_created_total", "Number of created products")
 
 def run_metrics_server():
-    print("🚀 Prometheus metrics available on port 9000")
-    start_http_server(9000)
+    try:
+        start_http_server(9000)
+    except OSError:
+        print("Prometheus already running on port 9000")
 
 def observe_request(endpoint: str):
     def decorator(func):

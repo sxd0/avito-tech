@@ -1,81 +1,68 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from app.core.security import create_access_token, create_dummy_token, get_password_hash, verify_password
+from fastapi import APIRouter, HTTPException, status
+from app.core.security import (
+    create_access_token,
+    create_dummy_token,
+    get_password_hash,
+    verify_password,
+)
 from app.dao.users import UsersDAO
-from app.schemas.auth import DummyLoginSchema, TokenSchema, UserLoginSchema, UserRegisterSchema, UserSchema
+from app.database import async_session_maker
+from app.schemas.auth import (
+    DummyLoginSchema,
+    TokenSchema,
+    UserLoginSchema,
+    UserRegisterSchema,
+    UserSchema,
+)
 from app.logger import logger
 
+router = APIRouter(tags=["Аутентификация"])
 
 
-router = APIRouter(
-    tags=["Аутентификация"]
-)
-
+# ---------- Dummy ----------------------------------------------------
 @router.post("/dummyLogin", response_model=TokenSchema)
-async def dummy_login(login_data: DummyLoginSchema):
-    """
-    Тестовый эндпоинт для получения токена с определенной ролью.
-    - **role**: Роль пользователя (employee или moderator)
-    """
-    if login_data.role not in ["employee", "moderator"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Роль должна быть 'employee' или 'moderator'"
+async def dummy_login(data: DummyLoginSchema):
+    if data.role not in ("employee", "moderator"):
+        raise HTTPException(400, "role must be 'employee' or 'moderator'")
+    return TokenSchema(access_token=create_dummy_token(data.role))
+
+
+# ---------- Register -------------------------------------------------
+@router.post("/register", response_model=UserSchema, status_code=201)
+async def register_user(data: UserRegisterSchema):
+    if data.role not in ("employee", "moderator"):
+        raise HTTPException(400, "role must be 'employee' or 'moderator'")
+
+    async with async_session_maker() as session:
+        dao = UsersDAO(session)
+
+        if await dao.find_one_or_none(email=data.email):
+            raise HTTPException(400, "email already exists")
+
+        await dao.add(
+            {
+                "email": data.email,
+                "hashed_password": get_password_hash(data.password),
+                "role": data.role,
+            }
         )
-    
-    access_token = create_dummy_token(login_data.role)
-    return TokenSchema(access_token=access_token)
+        await session.commit()
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserRegisterSchema):
-    """
-    Регистрация нового пользователя.
-    - **email**: Email пользователя
-    - **password**: Пароль пользователя
-    - **role**: Роль пользователя (employee или moderator)
-    """
-    if user_data.role not in ["employee", "moderator"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Роль должна быть 'employee' или 'moderator'"
-        )
-    
-    existing_user = await UsersDAO.find_one_or_none(email=user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь с таким email уже существует"
-        )
-    
-    hashed_password = get_password_hash(user_data.password)
-    
-    user_data_dict = {
-        "email": user_data.email,
-        "hashed_password": hashed_password,
-        "role": user_data.role,
-    }
-
-    user_id = await UsersDAO.add(**user_data_dict)
-    # user = await UsersDAO.find_one_or_none(id=user_id)
-    user = await UsersDAO.find_one_or_none(email=user_data.email)
-    if not user:
-        raise HTTPException(status_code=500, detail="Ошибка при создании пользователя")
-    logger.info(f"Зарегистрирован новый пользователь: {user_data.email}, роль: {user_data.role}")
+        user = await dao.find_one_or_none(email=data.email)
+        logger.info("User registered: %s [%s]", data.email, data.role)
+        return user
 
 
-    return user
-
+# ---------- Login ----------------------------------------------------
 @router.post("/login", response_model=TokenSchema)
-async def login_user(user_data: UserLoginSchema):
-    """
-    Вход пользователя в систему.
-    - **username**: Email пользователя
-    - **password**: Пароль пользователя
-    """
-    user = await UsersDAO.find_one_or_none(email=user_data.email)
-    if not user or not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные учётные данные")
-    logger.info(f"Пользователь вошел: {user.email}, роль: {user.role}")
+async def login_user(data: UserLoginSchema):
+    async with async_session_maker() as session:
+        dao = UsersDAO(session)
+        user = await dao.find_one_or_none(email=data.email)
 
-    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
-    return {"access_token": access_token, "token_type": "bearer"}
+        if not user or not verify_password(data.password, user.hashed_password):
+            raise HTTPException(401, "Invalid credentials")
+
+        logger.info("User login: %s [%s]", user.email, user.role)
+        token = create_access_token({"sub": str(user.id), "role": user.role})
+        return {"access_token": token, "token_type": "bearer"}
