@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 class PVZService(pvz_pb2_grpc.PVZServiceServicer):
     async def GetPVZList(self, request, context):
-        async with async_session_maker() as session:  # type: AsyncSession
+        async with async_session_maker() as session:
             dao = PVZDAO(session=session)
             pvzs = await dao.find_all()
             response = pvz_pb2.GetPVZListResponse()

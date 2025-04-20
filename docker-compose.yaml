@@ -3,6 +3,7 @@ services:
     build: .
     ports:
       - "8080:8080"
+      - "9000:9000"
     depends_on:
       - db
     environment:
@@ -35,12 +36,16 @@ services:
   grpc:
     build: .
     command: python app/server_grpc.py
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
     ports:
       - "3000:3000"
     volumes:
       - .:/app
     depends_on:
       - db
+
 
 
 volumes:

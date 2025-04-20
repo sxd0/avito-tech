@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.dependencies import get_current_employee
 from app.dao.pvz import PVZDAO
 from app.dao.reception import ReceptionDAO
+from app.metrics_server import RECEPTIONS_CREATED
 from app.schemas.pvz import ReceptionCreateSchema
+from app.logger import logger
+
 
 router = APIRouter(
     prefix="/receptions",
@@ -20,6 +23,8 @@ async def create_reception(
     
     - **pvz_id**: ID пункта выдачи заказов
     """
+    RECEPTIONS_CREATED.inc()
+
     pvz = await PVZDAO.find_one_or_none(id=reception_data.pvz_id)
     if not pvz:
         raise HTTPException(
@@ -40,6 +45,7 @@ async def create_reception(
     )
     
     created_reception = await ReceptionDAO.find_active_reception(reception_data.pvz_id)
-    
+    logger.info(f"Создана приёмка для ПВЗ {reception_data.pvz_id} (ID: {reception.id})")
+
     return created_reception
 

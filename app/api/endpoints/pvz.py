@@ -5,11 +5,13 @@ from typing import List, Optional
 from pydantic import UUID4
 from sqlalchemy import select, and_
 
+from app.logger import logger
 from app.api.dependencies import get_current_employee, get_current_moderator, get_current_user
 from app.dao.pvz import PVZDAO
 from app.dao.reception import ReceptionDAO
 from app.dao.product import ProductDAO
 from app.database import async_session_maker
+from app.metrics_server import PVZ_CREATED
 from app.models.pvz import PVZ
 from app.models.reception import Reception
 from app.models.product import Product
@@ -66,6 +68,9 @@ async def create_pvz(pvz_data: PVZCreateSchema, current_user: dict = Depends(get
     })
 
     pvz = await PVZDAO.find_one_or_none(id=pvz_id)
+    await PVZDAO.add(pvz)
+    PVZ_CREATED.inc()
+    logger.info(f"Создан ПВЗ: {pvz.city} (ID: {pvz.id})")
     return pvz
 
 
@@ -81,7 +86,7 @@ async def get_pvz_list(
     Получение списка ПВЗ с фильтрацией по дате приемки и пагинацией.
     Доступно для пользователей с ролью 'employee' или 'moderator'.
     """
-    
+    PVZ_CREATED.inc()
     user_role = current_user.role if hasattr(current_user, "role") else current_user.get("role")
 
     if user_role not in ["employee", "moderator"]:

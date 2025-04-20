@@ -3,7 +3,9 @@ from app.api.dependencies import get_current_employee
 from app.dao.pvz import PVZDAO
 from app.dao.reception import ReceptionDAO
 from app.dao.product import ProductDAO
+from app.metrics_server import PRODUCTS_CREATED
 from app.schemas.pvz import ProductCreateSchema
+from app.logger import logger
 
 router = APIRouter(
     tags=["Товары"]
@@ -21,6 +23,8 @@ async def add_product(
     - **type**: Тип товара (электроника, одежда, обувь)
     - **pvz_id**: ID пункта выдачи заказов
     """
+    PRODUCTS_CREATED.inc()
+
     pvz = await PVZDAO.find_one_or_none(id=product_data.pvz_id)
     if not pvz:
         raise HTTPException(
@@ -53,7 +57,8 @@ async def add_product(
         reception_id=active_reception.id,
         order_in_reception=max_order + 1
     )
-    
+    logger.info(f"Добавлен товар: {product.type} в приёмку {created_product.reception_id}")
+
     return created_product
 
 @router.post("/pvz/{pvz_id}/delete_last_product", status_code=status.HTTP_200_OK)
@@ -90,4 +95,6 @@ async def delete_last_product(
     
     await ProductDAO.delete(id=last_product.id)
     
+    logger.info(f"Удален последний товар из приёмки (ID товара: {last_product.id})")
+
     return {"message": "Товар успешно удален"}

@@ -3,6 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.core.security import create_access_token, create_dummy_token, get_password_hash, verify_password
 from app.dao.users import UsersDAO
 from app.schemas.auth import DummyLoginSchema, TokenSchema, UserLoginSchema, UserRegisterSchema, UserSchema
+from app.logger import logger
+
+
 
 router = APIRouter(
     tags=["Аутентификация"]
@@ -57,6 +60,8 @@ async def register_user(user_data: UserRegisterSchema):
     user = await UsersDAO.find_one_or_none(email=user_data.email)
     if not user:
         raise HTTPException(status_code=500, detail="Ошибка при создании пользователя")
+    logger.info(f"Зарегистрирован новый пользователь: {user_data.email}, роль: {user_data.role}")
+
 
     return user
 
@@ -70,6 +75,7 @@ async def login_user(user_data: UserLoginSchema):
     user = await UsersDAO.find_one_or_none(email=user_data.email)
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные учётные данные")
+    logger.info(f"Пользователь вошел: {user.email}, роль: {user.role}")
 
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
     return {"access_token": access_token, "token_type": "bearer"}
