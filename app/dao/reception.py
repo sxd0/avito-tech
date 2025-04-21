@@ -20,6 +20,5 @@ class ReceptionDAO(BaseDAO):
         return obj
 
     async def close(self, reception: Reception):
-        # в БД пишем "close"
         reception.status = "close"
         await self.session.flush()

@@ -19,7 +19,6 @@ from app.logger import logger
 router = APIRouter(tags=["Аутентификация"])
 
 
-# ---------- Dummy ----------------------------------------------------
 @router.post("/dummyLogin", response_model=TokenSchema)
 async def dummy_login(data: DummyLoginSchema):
     if data.role not in ("employee", "moderator"):
@@ -27,7 +26,6 @@ async def dummy_login(data: DummyLoginSchema):
     return TokenSchema(access_token=create_dummy_token(data.role))
 
 
-# ---------- Register -------------------------------------------------
 @router.post("/register", response_model=UserSchema, status_code=201)
 async def register_user(data: UserRegisterSchema):
     if data.role not in ("employee", "moderator"):
@@ -53,7 +51,6 @@ async def register_user(data: UserRegisterSchema):
         return user
 
 
-# ---------- Login ----------------------------------------------------
 @router.post("/login", response_model=TokenSchema)
 async def login_user(data: UserLoginSchema):
     async with async_session_maker() as session:
